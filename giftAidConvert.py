@@ -38,8 +38,9 @@ def output_to_ods(all_output, firstDate):
                 sheet[i+24, 5].set_value(output.address)
                 sheet[i+24, 6].set_value(output.postcode)
                 
-                dto = datetime.strptime(output.lastDate, "%d/%m/%Y")
-                sheet[i+24, 9].set_value(dto.strftime("%d/%m/%y"), 'date')
+                dt = datetime.strptime(output.lastDate, "%d/%m/%Y")
+                delta = (dt - do).days + 367
+                sheet[i+24, 9].set_value(delta)
                 sheet[i+24, 10].set_value(output.amount)
                 i+=1
                 

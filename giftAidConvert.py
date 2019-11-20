@@ -5,7 +5,9 @@ from datetime import *
 from ezodf import opendoc
 import os
 import sys
+import shutil
 import re
+import time
 #For xlt reading
 import xlrd as xlrd
 
@@ -23,7 +25,7 @@ def output_to_ods(all_output, firstDate):
     delta = (firstDate - do).days + 367
     sheet[12, 3].set_value(delta)
     
-    with open('input/unclaimed.csv', 'wb') as unclaimedNew:
+    with open('input/unclaimed.csv', 'w') as unclaimedNew:
         csv_unclaimed_writer = csv.writer(unclaimedNew,dialect='excel')
         
         i=0
@@ -91,7 +93,7 @@ class GiftAidReport():
         self.total_gift_aid_amount_offset = None
         self.total_balance_offset = None
         
-        self.addressbook = "G1-Gift-Aid-AddressBook.csv"
+        self.addressbook = "AddressBook.csv"
         
         # Other items
         self.totalFromTrans = 0
@@ -109,7 +111,7 @@ class GiftAidReport():
         self.process_report()
 
     def get_headers(self):
-        print "Looking at {}".format(self.report)
+        print("Looking at {}".format(self.report))
         
         found_headers = False
         for row in range(self.sheet.nrows):
@@ -132,20 +134,20 @@ class GiftAidReport():
                     if 'balance' in value.lower()  and self.total_balance_offset == None:
                         self.total_balance_offset = i 
             except Exception as e:
-                # print "Exception {}".format(e)
+                # print("Exception {}".format(e))
                 pass
 
         if self.found_headers is False:
             raise Exception("Failed to get headers")
         
-        print 'header offsets'
-        print self.date_offset, ' Date '
-        print self.deposit_offset, ' Deposit/type '
-        print self.name_offset_start, ' name start '
-        print self.name_offset_fin, ' name fin '
-        print self.total_cell_offset, ' total/amout '
-        print self.total_balance_offset, ' balance '
-        print self.total_gift_aid_amount_offset, ' where the total name is'
+        print('header offsets')
+        print(self.date_offset, ' Date ')
+        print(self.deposit_offset, ' Deposit/type ')
+        print(self.name_offset_start, ' name start ')
+        print(self.name_offset_fin, ' name fin ')
+        print(self.total_cell_offset, ' total/amout ')
+        print(self.total_balance_offset, ' balance ')
+        print(self.total_gift_aid_amount_offset, ' where the total name is')
         
         
     def parse_name(self, name):
@@ -178,9 +180,9 @@ class GiftAidReport():
             name = name.lstrip()
             name = name.rstrip()
             
-            print "NAME ", name
+            print("NAME ", name)
             firstName, surname = self.parse_name(name)
-            print firstName, surname
+            print(firstName, surname)
                 
         return firstName, surname
         
@@ -198,7 +200,7 @@ class GiftAidReport():
                 and 'gift aid income' in self.sheet.cell(row,self.total_gift_aid_amount_offset).value.lower() \
                 and 'non' not in self.sheet.cell(row,self.total_gift_aid_amount_offset).value.lower(): 
                 
-                print "row", row, total_cell, self.sheet.cell(row,self.total_balance_offset).value
+                print("row", row, total_cell, self.sheet.cell(row,self.total_balance_offset).value)
                 self.totalFromReport += total_cell
                 get_contents = 0
                 continue
@@ -305,9 +307,21 @@ def first_date_calc(firstDate, lastDate):
 def main():
     reports = []
     for item in os.listdir("input"):
+        print("looking at {}".format(item))
         file_path = os.path.join("input", item)
+        claim_path = os.path.join("claimed", item)
+        
+        # Get report info
         reports.append(GiftAidReport(file_path))
+        
+        # Move to claimed
+        if "unclaimed.csv" not in item:
+            shutil.move(file_path, claim_path)
     
+    if reports == []:
+        print("Nothing to process")
+        time.sleep(10)
+        sys.exit(1) 
     
     all_output = []
     firstDate = None
@@ -315,7 +329,7 @@ def main():
     for report in reports:
         totalFromReports += report.totalFromReport
         for output in report.outputLines:
-            print type(output.lastDate), output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode
+            print(type(output.lastDate), output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode)
             
             found = False
             for r in all_output:
@@ -337,12 +351,16 @@ def main():
                 
                 all_output.append(output)
                         
-    print "----------"
+    print("----------")
+    if all_output == []:
+        print("Nothing to output")
+        time.sleep(10)
+        sys.exit(1)  
     
     #output_to_csv(all_output, firstDate, totalFromReports)
     output_to_ods(all_output, firstDate)
     for output in all_output:
-        print output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode                
+        print(output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode)                
 
 if __name__ == "__main__":
 	main()

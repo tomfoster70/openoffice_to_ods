@@ -1,4 +1,3 @@
-
 from collections import namedtuple
 import csv
 from datetime import *
@@ -12,6 +11,9 @@ import time
 import xlrd as xlrd
 
 transactionLine = namedtuple('transactionLine', ['date', 'firstName','surname', 'amount'])
+
+class ExitException(Exception):
+    pass
 
 def output_to_ods(all_output, firstDate):
     doc = opendoc("Forms/gift_aid_schedule.ods")
@@ -31,7 +33,7 @@ def output_to_ods(all_output, firstDate):
         i=0
         for output in all_output:
             if output.address == "":
-                csv_row = [ output.lastDate, output.firstName, output.surname, output.amount ]
+                csv_row = [ output.lastDate, output.firstName, output.surname, round(output.amount,2) ]
                 csv_unclaimed_writer.writerow(csv_row)
             else:
                 sheet[i+24, 2].set_value(output.title)
@@ -43,7 +45,7 @@ def output_to_ods(all_output, firstDate):
                 dt = datetime.strptime(output.lastDate, "%d/%m/%Y")
                 delta = (dt - do).days + 367
                 sheet[i+24, 9].set_value(delta)
-                sheet[i+24, 10].set_value(output.amount)
+                sheet[i+24, 10].set_value(round(output.amount,2))
                 i+=1
                 
         
@@ -138,7 +140,7 @@ class GiftAidReport():
                 pass
 
         if self.found_headers is False:
-            raise Exception("Failed to get headers")
+            raise ExitException("Failed to get headers")
         
         print('header offsets')
         print(self.date_offset, ' Date ')
@@ -220,7 +222,7 @@ class GiftAidReport():
                 
                 self.totalFromTrans += float(amount)
                 if firstName == "":
-                    raise Exception("firstName is NULL {}".format(row))
+                    raise ExitException("firstName is NULL {}".format(row))
                 self.transactions.append(transactionLine(date, firstName, surname, amount))
              
     
@@ -289,8 +291,8 @@ class GiftAidReport():
         
             self.outputLines.append(ol)
         
-        if self.totalFromReport != self.totalFromTrans:
-            raise Exception("Totals from {} don't match {} != {}".format(self.report, self.totalFromReport, self.totalFromTrans))
+        if round(self.totalFromReport, 2) != round(self.totalFromTrans, 2):
+            raise ExitException("Totals from {} don't match {} != {}".format(self.report, self.totalFromReport, self.totalFromTrans))
 
 
 def first_date_calc(firstDate, lastDate):
@@ -313,15 +315,13 @@ def main():
         
         # Get report info
         reports.append(GiftAidReport(file_path))
-        
+
         # Move to claimed
         if "unclaimed.csv" not in item:
             shutil.move(file_path, claim_path)
     
     if reports == []:
-        print("Nothing to process")
-        time.sleep(10)
-        sys.exit(1) 
+        raise ExitException("Nothing to process")
     
     all_output = []
     firstDate = None
@@ -338,7 +338,7 @@ def main():
                     rDate = datetime.strptime(r.lastDate, "%d/%m/%Y")
                     
                     if outputDate < rDate:
-                        r.lastDate = outputDate
+                        r.lastDate = output.lastDate
                         
                     firstDate = first_date_calc(firstDate, output.lastDate)
                     
@@ -353,14 +353,13 @@ def main():
                         
     print("----------")
     if all_output == []:
-        print("Nothing to output")
-        time.sleep(10)
-        sys.exit(1)  
+        raise ExitException("Nothing to output")
     
     #output_to_csv(all_output, firstDate, totalFromReports)
     output_to_ods(all_output, firstDate)
     for output in all_output:
-        print(output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode)                
+        print(output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode)
 
 if __name__ == "__main__":
-	main()
+    print('Starting...')
+    main()

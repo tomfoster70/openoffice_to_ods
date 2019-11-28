@@ -292,7 +292,7 @@ class GiftAidReport():
             self.outputLines.append(ol)
         
         if round(self.totalFromReport, 2) != round(self.totalFromTrans, 2):
-            raise ExitException("Totals from {} don't match {} != {}".format(self.report, self.totalFromReport, self.totalFromTrans))
+            raise ExitException("Gift aid total from {} don't match what I calculated they should be {} != {}".format(self.report, self.totalFromReport, self.totalFromTrans))
 
 
 def first_date_calc(firstDate, lastDate):
@@ -321,7 +321,7 @@ def main():
             shutil.move(file_path, claim_path)
     
     if reports == []:
-        raise ExitException("Nothing to process")
+        raise ExitException("Nothing to process - no files at all in the input folder?")
     
     all_output = []
     firstDate = None
@@ -353,7 +353,7 @@ def main():
                         
     print("----------")
     if all_output == []:
-        raise ExitException("Nothing to output")
+        raise ExitException("Nothing to output - are there any input files?")
     
     #output_to_csv(all_output, firstDate, totalFromReports)
     output_to_ods(all_output, firstDate)
@@ -362,4 +362,8 @@ def main():
 
 if __name__ == "__main__":
     print('Starting...')
-    main()
+    try:
+        main()
+    except Exception as e:
+        print('Failed for some reason - please ask tom to fix me. Please include input files and this error [{}]'.format(e))
+        time.sleep(20)

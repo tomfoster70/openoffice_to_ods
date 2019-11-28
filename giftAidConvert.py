@@ -7,6 +7,7 @@ import sys
 import shutil
 import re
 import time
+import traceback
 #For xlt reading
 import xlrd as xlrd
 
@@ -366,4 +367,6 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print('Failed for some reason - please ask tom to fix me. Please include input files and this error [{}]'.format(e))
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_tb(exc_traceback)
         time.sleep(20)

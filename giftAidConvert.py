@@ -55,22 +55,29 @@ def output_to_ods(all_output, firstDate):
 
 
 def output_to_csv(all_output, firstDate, totalFromReports, outputFilename='output/OutputGiftAidSpreadsheet.csv'):
-    with open(outputFilename, 'wb') as csvfileNew:
+
+    grandTotal = 0
+    with open(outputFilename, 'w') as csvfileNew:
         csv_writer = csv.writer(csvfileNew, dialect='excel')
 
-        with open('input/unclaimed.csv', 'wb') as unclaimedNew:
+        with open('input/unclaimed.csv', 'w') as unclaimedNew:
             csv_unclaimed_writer = csv.writer(unclaimedNew, dialect='excel')
 
-            csv_writer.writerow(["FirstDate: ", firstDate, "Total from reports", totalFromReports, "Gift Aid Amount: ", totalFromReports * 0.25])
+            csv_writer.writerow(["FirstDate: ", firstDate.strftime("%d/%m/%Y"), "Total from reports", totalFromReports, "Gift Aid Amount: ", totalFromReports * 0.25])
 
             for output in all_output:
 
+                grandTotal += output.amount
                 if output.address == "":
                     csv_row = [ output.lastDate, output.firstName, output.surname, output.amount ]
                     csv_unclaimed_writer.writerow(csv_row)
                 else:
                     csv_row = [ output.title, output.firstName, output.surname, output.address, output.postcode, "", "", output.lastDate, output.amount ]
                     csv_writer.writerow(csv_row)
+
+    if int(grandTotal) != int(totalFromReports):
+        print('\n\n')
+        print('*******WARNING!!!! Total does not match report totals grand total {} != totalFromReports {}*******\n'.format(grandTotal, totalFromReports))
 
 
 class outputLine():
@@ -116,10 +123,10 @@ class GiftAidReport():
 
         self.process_report()
 
-    def get_headers(self):
+    def get_headers_quickbooks(self):
         print("Looking at {}".format(self.report))
 
-        found_headers = False
+        self.found_headers = False
         for row in range(self.sheet.nrows):
             try:
                 for i in range(0, 29, 1):
@@ -142,6 +149,8 @@ class GiftAidReport():
             except Exception as e:
                 # print("Exception {}".format(e))
                 pass
+            if self.found_headers == True:
+                break
 
         if self.found_headers is False:
             raise ExitException("Failed to get headers")
@@ -154,6 +163,54 @@ class GiftAidReport():
         print(self.total_cell_offset, ' total/amout ')
         print(self.total_balance_offset, ' balance ')
         print(self.total_gift_aid_amount_offset, ' where the total name is')
+
+    def get_headers_xero(self):
+        print("Looking at {}".format(self.report))
+
+        self.found_headers = False
+        for row in range(self.sheet.nrows):
+            try:
+                for i in range(0, 10, 1):
+                    value = self.sheet.cell(row, i).value
+                    if 'account name' in value.lower()  and self.deposit_offset == None:
+                        self.deposit_offset = i
+                        self.found_headers = True
+                    if 'date' in value.lower() and self.date_offset == None:
+                        self.date_offset = i
+                    if 'transaction' == value.lower() and self.name_offset_start == None:
+                        self.name_offset_start = i
+                    if 'gross' in value.lower()  and self.total_cell_offset == None:
+                        self.total_cell_offset = i
+            except Exception as e:
+                # print("Exception {}".format(e))
+                pass
+            if self.found_headers == True:
+                break
+
+        if self.found_headers is False:
+            raise ExitException("Failed to get headers")
+
+        print('header offsets')
+        print(self.date_offset, ' Date ')
+        print(self.deposit_offset, ' Account Name ')
+        print(self.name_offset_start, ' Transaction ')
+        print(self.total_cell_offset, ' Gross ')
+
+    def strip_name(self, name):
+
+        print("Name before remove: {}".format(name))
+        items_to_remove = ['chq in offering', '\d+/\d+/\d+', 'Church', 'Collection', 'Deposit', 'New',
+            'Godfirst', 'Special', 'chq', 'Chq', 'Stewardship', 'Services',
+            'online', 'giving', 'cash', 'Cheque', 'Izettle', 'For Barry Church', ':', '[F|f]or .*']
+        for item in items_to_remove:
+            name = re.sub(item, '', name)
+        # name = re.sub('chq in offering', '', name)
+        # name = re.sub('\d+/\d+/\d+', '', name)
+        name = name.lstrip()
+        name = name.rstrip()
+
+        print("NAME after remove", name)
+        return name
 
     def parse_name(self, name):
         nameItems = name.split(' ')
@@ -180,24 +237,13 @@ class GiftAidReport():
                     payeename.append(item2)
             name = " ".join(payeename)
 
-            print("Name before remove: {}".format(name))
-            items_to_remove = ['chq in offering', '\d+/\d+/\d+', 'Church', 'Collection', 'Deposit', 'New',
-                'Godfirst', 'Special', 'chq', 'Chq', 'Stewardship', 'Services',
-                'online', 'giving', 'cash', 'Cheque', 'Izettle', 'For Barry Church', ':', '[F|f]or .*']
-            for item in items_to_remove:
-                name = re.sub(item, '', name)
-            # name = re.sub('chq in offering', '', name)
-            # name = re.sub('\d+/\d+/\d+', '', name)
-            name = name.lstrip()
-            name = name.rstrip()
-
-            print("NAME after remove", name)
+            name = self.strip_name(name)
             firstName, surname = self.parse_name(name)
             print(firstName, surname)
 
         return firstName, surname
 
-    def process_giving_xlsx(self):
+    def process_giving_quickbooks(self):
 
         get_contents = 1
         for row in range(self.sheet.nrows):
@@ -233,6 +279,34 @@ class GiftAidReport():
                 if firstName == "":
                     raise ExitException("firstName is NULL {} {}".format(row,))
                 self.transactions.append(transactionLine(date, firstName, surname, amount))
+
+    def process_giving_xero(self):
+
+        get_contents = 1
+        for row in range(self.sheet.nrows):
+
+            deposit = self.sheet.cell(row, self.deposit_offset).value
+            date_cell = self.sheet.cell(row, self.date_offset).value
+            amount_payee_cell = self.sheet.cell(row, self.total_cell_offset).value
+            total_cell = self.sheet.cell(row, self.total_cell_offset).value
+
+            if re.search('^Gift Aid Income:', deposit):
+                try:
+                    date = xlrd.xldate_as_tuple(date_cell, fh.datemode)
+                    date = "%s/%s/%s" % (date[2], date[1], date[0])
+                except:
+                    date = date_cell
+
+                # need to get amaount, also remove ',' from amounts over 1000.
+                amount = str(amount_payee_cell)
+
+            name = self.strip_name(name)
+            firstName, surname = self.parse_name(name)
+
+            self.totalFromTrans += float(amount)
+            if firstName == "":
+                raise ExitException("firstName is NULL {} {}".format(row,))
+            self.transactions.append(transactionLine(date, firstName, surname, amount))
 
     def process_giving_csv(self):
 
@@ -281,8 +355,11 @@ class GiftAidReport():
         if self.unclaimed == True:
             self.process_giving_csv()
         else:
-            self.get_headers()
-            self.process_giving_xlsx()
+            # self.get_headers_quickbooks()
+            # self.process_giving_quickbooks()
+
+            self.get_headers_xero()
+            self.process_giving_xero()
 
         print(self.transactions)
         for trans in self.transactions:
@@ -372,8 +449,8 @@ def main():
     if all_output == []:
         raise ExitException("Nothing to output - are there any input files?")
 
-    # output_to_csv(all_output, firstDate, totalFromReports)
-    output_to_ods(all_output, firstDate)
+    output_to_csv(all_output, firstDate, totalFromReports)
+    # output_to_ods(all_output, firstDate)
     for output in all_output:
         print(output.lastDate, output.firstName, " :sur: ", output.surname, output.amount, output.address, output.postcode)
 

@@ -199,9 +199,10 @@ class GiftAidReport():
     def strip_name(self, name):
 
         print("Name before remove: {}".format(name))
-        items_to_remove = ['chq in offering', '\d+/\d+/\d+', 'Church', 'Collection', 'Deposit', 'New',
+        items_to_remove = ['chq in offering', 'offering', '\d+/\d+/\d+', '-', 'Church', 'Collection', 'Deposit', 'New',
             'Godfirst', 'Special', 'chq', 'Chq', 'Stewardship', 'Services',
-            'online', 'giving', 'cash', 'Cheque', 'Izettle', 'For Barry Church', ':', '[F|f]or .*']
+            'online', 'giving', 'cash', 'Cash', 'Cheque', 'Izettle', 'For Barry Church', 'Barry', ':',
+             ',', '[F|f]or .*', 'Nov', 'Dec', ' in ', ' &']
         for item in items_to_remove:
             name = re.sub(item, '', name)
         # name = re.sub('chq in offering', '', name)
@@ -265,7 +266,7 @@ class GiftAidReport():
                 continue
             elif get_contents == 1 and deposit == 'Deposit':
                 try:
-                    date = xlrd.xldate_as_tuple(date_cell, fh.datemode)
+                    date = xlrd.xldate_as_tuple(date_cell, 0)
                     date = "%s/%s/%s" % (date[2], date[1], date[0])
                 except:
                     date = date_cell
@@ -287,26 +288,25 @@ class GiftAidReport():
 
             deposit = self.sheet.cell(row, self.deposit_offset).value
             date_cell = self.sheet.cell(row, self.date_offset).value
-            amount_payee_cell = self.sheet.cell(row, self.total_cell_offset).value
+            name = self.sheet.cell(row, self.name_offset_start).value
             total_cell = self.sheet.cell(row, self.total_cell_offset).value
 
-            if re.search('^Gift Aid Income:', deposit):
-                try:
-                    date = xlrd.xldate_as_tuple(date_cell, fh.datemode)
-                    date = "%s/%s/%s" % (date[2], date[1], date[0])
-                except:
-                    date = date_cell
+            if not re.search('^Gift Aid Income:', deposit):
+                continue
 
-                # need to get amaount, also remove ',' from amounts over 1000.
-                amount = str(amount_payee_cell)
+            print(deposit, date_cell, name,)
 
             name = self.strip_name(name)
+            print('Name {}'.format(name))
             firstName, surname = self.parse_name(name)
 
-            self.totalFromTrans += float(amount)
+            date = xlrd.xldate_as_tuple(date_cell, 0)
+            date = "%s/%s/%s" % (date[2], date[1], date[0])
+
+            self.totalFromTrans += float(total_cell)
             if firstName == "":
                 raise ExitException("firstName is NULL {} {}".format(row,))
-            self.transactions.append(transactionLine(date, firstName, surname, amount))
+            self.transactions.append(transactionLine(date, firstName, surname, total_cell))
 
     def process_giving_csv(self):
 
@@ -376,9 +376,6 @@ class GiftAidReport():
 
             self.outputLines.append(ol)
 
-        if round(self.totalFromReport, 2) != round(self.totalFromTrans, 2):
-            raise ExitException("Gift aid total from {} don't match what I calculated they should be {} != {}".format(self.report, self.totalFromReport, self.totalFromTrans))
-
 
 def first_date_calc(firstDate, lastDate):
 
@@ -415,7 +412,8 @@ def main():
 
     # Loop all of the reports and count everything up
     for report in reports:
-        totalFromReports += report.totalFromReport
+        # Dirty hack for xero
+        totalFromReports += report.totalFromTrans
 
         # For line in report
         for output in report.outputLines:
@@ -426,6 +424,7 @@ def main():
             # Check to see if we have already got this person in the output
             for r in all_output:
                 if output.firstName == r.firstName and output.surname == r.surname:
+
                     outputDate = datetime.strptime(output.lastDate, "%d/%m/%Y")
                     rDate = datetime.strptime(r.lastDate, "%d/%m/%Y")
 
@@ -440,6 +439,7 @@ def main():
 
             # If we haven't seen this person before then add them!
             if found is False:
+                print('First time...')
 
                 firstDate = first_date_calc(firstDate, output.lastDate)
 
